@@ -18,9 +18,12 @@ func New(dbPath string) (*Storage, error) {
 	const op = "storage.sqlite.New"
 
 	db, err := sql.Open("sqlite3", dbPath)
-
 	if err != nil {
-		return nil, fmt.Errorf("%s %w", op, err)
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if err = db.Ping(); err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
 	return &Storage{db: db}, nil
@@ -48,22 +51,23 @@ func (s *Storage) SaveUrl(urlToSave string, alias string) (int64, error) {
 
 	stmt, err := s.db.Prepare(saveUrlSql)
 	if err != nil {
-		return 0, fmt.Errorf("%s %w", op, err)
+		return 0, fmt.Errorf("%s: %w", op, err)
 	}
+	defer stmt.Close()
 
 	now := time.Now()
 	res, err := stmt.Exec(urlToSave, alias, now, now)
 	if err != nil {
 		if sqliteErr, ok := err.(sqlite3.Error); ok && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
-			return 0, fmt.Errorf("%s %w", op, storage.ErrUrlAlreadyExists)
+			return 0, fmt.Errorf("%s: %w", op, storage.ErrUrlAlreadyExists)
 		}
 
-		return 0, fmt.Errorf("%s %w", op, err)
+		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 
 	id, err := res.LastInsertId()
 	if err != nil {
-		return 0, fmt.Errorf("%s: failed to get last insert id %w", op, err)
+		return 0, fmt.Errorf("%s: failed to get last insert id: %w", op, err)
 	}
 
 	return id, nil
@@ -83,8 +87,9 @@ func (s *Storage) GetUrlByAlias(alias string) (string, error) {
 
 	stmt, err := s.db.Prepare(getUrlByAliasSql)
 	if err != nil {
-		return "", fmt.Errorf("%s %w", op, err)
+		return "", fmt.Errorf("%s: %w", op, err)
 	}
+	defer stmt.Close()
 
 	var result string
 	err = stmt.QueryRow(alias).Scan(&result)
