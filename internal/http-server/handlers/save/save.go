@@ -4,7 +4,6 @@ import (
 	"errors"
 	resp "gushort/internal/lib/api/response"
 	"gushort/internal/lib/logger/sl"
-	"gushort/internal/lib/random"
 	"gushort/internal/storage"
 	"log/slog"
 	"net/http"
@@ -28,9 +27,9 @@ type UrlSaver interface {
 	Save(url string, reqAlias *string) (string, error)
 }
 
-const aliasLength = 6
-
 func New(log *slog.Logger, urlSaver UrlSaver) http.HandlerFunc {
+	validate := validator.New()
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.save"
 
@@ -51,8 +50,8 @@ func New(log *slog.Logger, urlSaver UrlSaver) http.HandlerFunc {
 
 		log.Info("request body decoded", slog.Any("request", req))
 
-		if err := validator.New().Struct(req); err != nil {
-			log.Error("failed to decode request body", sl.Err(err))
+		if err := validate.Struct(req); err != nil {
+			log.Error("invalid request", sl.Err(err))
 
 			validateErrs := err.(validator.ValidationErrors)
 			render.JSON(w, r, resp.ValidationError(validateErrs))
@@ -60,12 +59,12 @@ func New(log *slog.Logger, urlSaver UrlSaver) http.HandlerFunc {
 			return
 		}
 
-		alias := req.Alias
-		if alias == "" {
-			alias = random.NewRandomAlias(aliasLength)
+		var reqAlias *string
+		if req.Alias != "" {
+			reqAlias = &req.Alias
 		}
 
-		savedAls, err := urlSaver.Save(req.Url, &alias)
+		savedAlias, err := urlSaver.Save(req.Url, reqAlias)
 		if errors.Is(err, storage.ErrUrlAlreadyExists) {
 			log.Info("url already exists", slog.String("url", req.Url))
 
@@ -82,8 +81,8 @@ func New(log *slog.Logger, urlSaver UrlSaver) http.HandlerFunc {
 			return
 		}
 
-		log.Info("url added", slog.String("alias", savedAls))
+		log.Info("url added", slog.String("alias", savedAlias))
 
-		render.JSON(w, r, Response{resp.OK(), alias})
+		render.JSON(w, r, Response{resp.OK(), savedAlias})
 	}
 }

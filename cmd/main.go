@@ -26,7 +26,6 @@ const (
 )
 
 func main() {
-	os.Setenv("CONFIG_PATH", "local.yaml")
 	cfg := config.MustParseConfig()
 
 	log := setupLogger(cfg.Env)
@@ -40,7 +39,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	url_shortener := serviceShortener.New(log, storage)
+	urlShortener := serviceShortener.New(log, storage)
 
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
@@ -49,8 +48,8 @@ func main() {
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
 
-	router.Post("/url", handlerSave.New(log, url_shortener))
-	router.Get("/{alias}", handlerRedirect.New(log, url_shortener))
+	router.Post("/url", handlerSave.New(log, urlShortener))
+	router.Get("/{alias}", handlerRedirect.New(log, urlShortener))
 
 	log.Info("starting server", slog.String("address", cfg.HttpServer.Address))
 
@@ -63,7 +62,8 @@ func main() {
 	}
 
 	if err := srv.ListenAndServe(); err != nil {
-		log.Error("failed to start server")
+		log.Error("failed to start server", sl.Err(err))
+		os.Exit(1)
 	}
 }
 

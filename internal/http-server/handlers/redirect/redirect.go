@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"errors"
 	resp "gushort/internal/lib/api/response"
 	"gushort/internal/lib/logger/sl"
+	"gushort/internal/storage"
 	"log/slog"
 	"net/http"
 
@@ -38,6 +40,13 @@ func New(log *slog.Logger, urlGetter UrlGetter) http.HandlerFunc {
 		}
 
 		url, err := urlGetter.Get(alias)
+		if errors.Is(err, storage.ErrUrlNotFound) {
+			log.Info("alias not found", slog.String("alias", alias))
+
+			render.Status(r, http.StatusNotFound)
+			render.JSON(w, r, resp.Error("alias not found"))
+			return
+		}
 		if err != nil {
 			log.Error("failed to get url by alias", sl.Err(err))
 
